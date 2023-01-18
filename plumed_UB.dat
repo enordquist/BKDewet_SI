@@ -1,0 +1,25 @@
+# COLVAR >> COORDINATION
+# https://www.plumed.org/doc-v2.6/user-doc/html/_c_o_o_r_d_i_n_a_t_i_o_n.html
+
+# change units
+UNITS LENGTH=A ENERGY=kcal/mol
+
+water:  GROUP NDX_FILE=md.ndx NDX_GROUP=name_OH2 # really the water O
+lipids: GROUP NDX_FILE=md.ndx NDX_GROUP=POPC_carbons # really popc C
+center: GROUP NDX_FILE=md.ndx NDX_GROUP=group_Protein_and_resid_314_and_name_CA # 314 CA
+
+CENTER ATOMS=center LABEL=cen 
+
+COORDINATION GROUPA=cen GROUPB=water SWITCH={GAUSSIAN D_0=8 R_0=1.5 D_MAX=13} NLIST NL_CUTOFF=20 NL_STRIDE=10 LABEL=occ
+
+# lipid diffusion will be negligible in 100ns, safe to set stride to be large (it will still update)
+# conservative radius just to prevent lipids from getting stuck
+COORDINATION GROUPA=cen GROUPB=lipids SWITCH={GAUSSIAN D_0=5 R_0=1 D_MAX=9} NLIST NL_CUTOFF=20 NL_STRIDE=10000 LABEL=lip
+
+RESTRAINT ARG=lip AT=0 SLOPE=40 LABEL=restlip# penalty of 40 kcal/mol for each lipid C entering the pore
+
+# Water restraint centered at 10 in this case
+RESTRAINT ARG=occ AT=10 KAPPA=0.2 LABEL=rest
+
+# Write data to file named based on center of restraint (also saving more data then necessary)
+PRINT ARG=occ,rest.bias,lip FILE=COLVAR_10.dat STRIDE=50

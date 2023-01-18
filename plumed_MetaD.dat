@@ -1,0 +1,52 @@
+# vim: ft=plumed
+# COLVAR >> COORDINATION
+# https://www.plumed.org/doc-v2.6/user-doc/html/_c_o_o_r_d_i_n_a_t_i_o_n.html
+
+# change units
+UNITS LENGTH=A ENERGY=kcal/mol
+
+water:  GROUP NDX_FILE=md.ndx NDX_GROUP=name_OH2 # really the water O
+lipids: GROUP NDX_FILE=md.ndx NDX_GROUP=POPC_carbons # really popc C
+center: GROUP NDX_FILE=md.ndx NDX_GROUP=group_Protein_and_resid_314_and_name_CA # 314 CA
+
+CENTER ATOMS=center LABEL=cen 
+
+COORDINATION GROUPA=cen GROUPB=water SWITCH={GAUSSIAN D_0=8 R_0=1.5 D_MAX=13} NLIST NL_CUTOFF=20 NL_STRIDE=10 LABEL=occ
+
+# lipid diffusion will be negligible in 100ns, safe to set stride to be large (it will still update)
+# conservative radius just to prevent lipids from getting stuck
+COORDINATION GROUPA=cen GROUPB=lipids SWITCH={GAUSSIAN D_0=5 R_0=1 D_MAX=9} NLIST NL_CUTOFF=20 NL_STRIDE=10000 LABEL=lip
+
+# restrain occ between 2 and 90 ('flat-bottom' between)
+lwall: LOWER_WALLS ARG=occ AT=2  KAPPA=50.0
+uwall: UPPER_WALLS ARG=occ AT=90 KAPPA=50.0 # coordinate this with GRID_MAX
+
+restraint: RESTRAINT ARG=lip AT=0 SLOPE=40 # penalty of 40 kcal/mol for each lipid C entering the pore
+
+METAD ...
+LABEL=metad
+ARG=occ
+PACE=5000     # timesteps, slowed 10x to account for slower orthogonal DoF fluctuation
+HEIGHT=0.2    # in kcal/mol
+SIGMA=1.0     # width of gaussian, 1 unit occupancy space
+FILE=HILLS    # 
+GRID_MIN=0    # lwall - 2
+GRID_MAX=92   # uwall + 2
+# default grid spacing is 1/5 sigma
+TEMP=300      # T
+BIASFACTOR=5  # 1 corresponds to UNBIASED, large corresponds to no tempering
+... METAD
+
+## monitor the two variables and the metadynamics bias potential
+#  print stride = pace (no point in faster)
+PRINT STRIDE=5000 ARG=occ,lip,metad.bias FILE=COLVAR
+
+## biasfactor is t1/2 for tempering the height of bias
+## or in other words, it will take bf-many depositions (pace) to temper the bias you deposit by ~1/2
+##
+## bf = (T + dT)/T
+##
+## dV/dt ~ exp(-V/(k*(bf-1)*T)) (how the energy changes with time, what you're adding this timestep)
+## MANUAL: https://www.plumed.org/pdf/manual_1-3-0.pdf (page 29, Well-tempered Metadynamics)
+#
+#
